@@ -45,6 +45,10 @@ async function handle(request: NextRequest, context: Context) {
     const origin = request.headers.get("origin");
     const allowedOrigin = process.env.APP_ORIGIN ?? request.nextUrl.origin;
     if (method !== "GET" && origin && origin !== allowedOrigin) throw new UserError("Request origin is not allowed.",403);
+    if (!process.env.DATABASE_URL) {
+      if (resource === "session" && !id && method === "GET") return json({user:null});
+      throw new UserError("This deployment is in demo mode. Connect a database to enable private workspaces.",503);
+    }
     if (resource === "session" && !id) {
       if (method === "GET") return json({user:await identity(token)});
       const cookie = {httpOnly:true,sameSite:"lax" as const,secure:allowedOrigin.startsWith("https://"),path:"/"};

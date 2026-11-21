@@ -47,6 +47,7 @@ main{padding:34px 29px 26px;min-width:0}
 .main-header{margin-bottom:25px}
 .main-header h1{font-size:25px;line-height:1.2;letter-spacing:-.65px;font-weight:560}
 .main-header p{color:var(--muted);margin:6px 0 0;font-size:13px}
+.availability{max-width:240px;color:var(--muted);font-size:12px}
 .desk{display:grid;grid-template-columns:minmax(0,1fr) minmax(250px,31%);gap:13px;align-items:start}
 .conversation,.source-pane{min-width:0;border:1px solid var(--border);border-radius:8px;background:var(--paper)}
 .conversation{display:flex;flex-direction:column}

@@ -18,7 +18,7 @@ async function api<T>(path:string, method="GET", body?:object) {
   return data as T;
 }
 
-export default function Workspace({uploadLimitMb}: {uploadLimitMb:number}) {
+export default function Workspace({uploadLimitMb,workspaceEnabled}: {uploadLimitMb:number;workspaceEnabled:boolean}) {
   const [user,setUser] = useState("");
   const [docs,setDocs] = useState<Document[]>([]);
   const [selection,setScoped] = useState<string[]|null>(null);
@@ -54,11 +54,12 @@ export default function Workspace({uploadLimitMb}: {uploadLimitMb:number}) {
     setDocs([]);
   }
   useEffect(() => {
+    if (!workspaceEnabled) return;
     const version = workspaceVersion.current;
     api<{user:{email:string}|null}>("session").then(({user})=>{
       if(user && version === workspaceVersion.current) enter(user.email);
     }).catch(()=>{});
-  },[]);
+  },[workspaceEnabled]);
   useEffect(() => {
     if (user) refresh().catch(error=>setError(error.message));
   },[user,refresh]);
@@ -183,12 +184,12 @@ export default function Workspace({uploadLimitMb}: {uploadLimitMb:number}) {
       <div className="brand"><div className="mark"><Layers3 size={24} strokeWidth={1.7}/></div><span>SourceDesk</span></div>
       <div className="library">
         <div className="side-heading"><h2>Documents</h2><span>{listed.length}</span></div>
-        <button type="button" className="upload" disabled={working} onClick={()=>user?fileInput.current?.click():setAuth(true)}><Plus size={17}/> Upload document</button>
+        {workspaceEnabled&&<button type="button" className="upload" disabled={working} onClick={()=>user?fileInput.current?.click():setAuth(true)}><Plus size={17}/> Upload document</button>}
         <input hidden type="file" ref={fileInput} accept=".pdf,.docx,.txt,.md,.markdown" onChange={event=>{
           const file=event.target.files?.[0]; event.target.value="";
           if(file){setWorking(true);setError("");upload(file).catch(error=>setError(error.message)).finally(()=>setWorking(false));}
         }}/>
-        <p className="file-help">PDF, DOCX, TXT, MD · up to {uploadLimitMb} MB</p>
+        {workspaceEnabled&&<p className="file-help">PDF, DOCX, TXT, MD · up to {uploadLimitMb} MB</p>}
         <button type="button" className="scope-all" aria-pressed={scoped===null} onClick={()=>setScoped(null)}><Layers3 size={16}/> All indexed documents {scoped===null&&<Check size={15}/>}</button>
         <div className="doc-list">{listed.map(doc=><div key={doc.id} className="doc">
           <div className="doc-row">
@@ -207,12 +208,13 @@ export default function Workspace({uploadLimitMb}: {uploadLimitMb:number}) {
       <div className="account">
         <div><strong>{user||"Sample workspace"}</strong><small>{user?"Private workspace":"Interactive demo"}</small></div>
         {user?<button type="button" className="icon" disabled={working||asking||busyIds.length>0} title="Sign out" aria-label="Sign out" onClick={()=>api("session","DELETE").then(()=>enter("")).catch(error=>setError(error.message))}><LogOut size={17}/></button>:
-        <button type="button" className="plain sign-in" onClick={()=>{setRegister(false);setAuth(true);}}>Sign in <ChevronRight size={14}/></button>}
+        workspaceEnabled&&<button type="button" className="plain sign-in" onClick={()=>{setRegister(false);setAuth(true);}}>Sign in <ChevronRight size={14}/></button>}
       </div>
     </aside>
     <main>
       <header className="main-header"><div><h1>Document workspace</h1><p>Ask questions and trace answers back to your documents.</p></div>
-      {!user&&<button type="button" className="plain" onClick={()=>{setRegister(true);setAuth(true);}}>Create workspace <ArrowRight size={15}/></button>}</header>
+      {!workspaceEnabled&&<span className="availability">Demo mode · Sign-in and uploads are offline until a database is connected.</span>}
+      {workspaceEnabled&&!user&&<button type="button" className="plain" onClick={()=>{setRegister(true);setAuth(true);}}>Create workspace <ArrowRight size={15}/></button>}</header>
       <div className="desk">
         <section className="conversation" aria-label="Questions and answers">
           <div className="pane-header"><h2>Ask your documents</h2><span>{scoped===null?"All indexed documents":scoped.length+" selected"}</span></div>
@@ -237,7 +239,7 @@ export default function Workspace({uploadLimitMb}: {uploadLimitMb:number}) {
               <input aria-label="Question" placeholder="Ask a question about your documents…" value={input} maxLength={1200} onChange={event=>setInput(event.target.value)}/>
               <button type="submit" className="send" disabled={!input.trim()||asking||(!!user&&!ready.length)} aria-label="Ask question"><ArrowUp size={19}/></button>
             </form>
-            <p className="composer-note">{user?"Answers use excerpts from the selected documents.":"Demo uses prewritten answers. Sign in to upload files and ask your own questions."}</p>
+            <p className="composer-note">{user?"Answers use excerpts from the selected documents.":workspaceEnabled?"Demo uses prewritten answers. Sign in to upload files and ask your own questions.":"Demo uses prewritten answers for the sample documents."}</p>
           </div>
         </section>
         <aside className="source-pane" aria-label="Source preview" tabIndex={-1} ref={sourcePanel}>
