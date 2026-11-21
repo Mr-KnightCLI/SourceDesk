@@ -27,6 +27,8 @@ Import the GitHub repository into Vercel as a Next.js project using Node.js 24. 
 | `AI_PROVIDER` | Set to `gemini` when using Gemini. |
 | `GEMINI_API_KEY` or `OPENAI_API_KEY` | Server-side key for the selected provider. |
 
+After linking the Vercel CLI to the project, run `vercel env run --environment production -- node scripts/migrate.cjs` to apply the schema using the hosted database connection. The hosted workspace has its own accounts and uploads. Create an account on the Vercel site to use it.
+
 The Vercel upload limit is 4 MB per file, leaving room for multipart request overhead. Local installations accept up to 10 MB.
 
 ## 60-second walkthrough
