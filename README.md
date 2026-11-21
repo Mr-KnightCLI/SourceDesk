@@ -2,6 +2,8 @@
 
 A document research workspace built with Next.js, TypeScript, PostgreSQL, and pgvector. Upload files, ask questions across your library or a selection, and open inline citations to see the exact indexed excerpt and its location.
 
+[Open SourceDesk on Vercel](https://sourcedesk-pearl.vercel.app)
+
 ## Run locally
 
 Use Node.js 24 and either Docker with Compose or an existing PostgreSQL database with pgvector available.
