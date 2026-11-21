@@ -133,6 +133,23 @@ async function main() {
     assert.equal(plaintext[0]?.location,"Paragraph 1");
     console.log("PASS TXT, Markdown, invalid format/size, malformed DOCX, OCR detection, and failed indexing retry");
 
+    const base=provider();
+    const attempted:string[]=[];
+    const resumable=store(query,{...base,embeddingBatchSize:1,async embed(texts){
+      attempted.push(...texts);
+      if (attempted.length===2) throw new Error("Simulated provider interruption");
+      return base.embed(texts);
+    }});
+    const resumeDoc=await resumable.upload(owner,"Resume test.txt",Buffer.from("Repeated passage\n\nSecond passage\n\nRepeated passage"));
+    assert.equal((await resumable.index(owner,resumeDoc.id)).status,"failed");
+    assert.equal((await resumable.list(owner)).find(item=>item.id===resumeDoc.id)?.processed,1);
+    assert.deepEqual(await resumable.retrieve(owner,"Repeated passage",[resumeDoc.id]),[]);
+    assert.equal((await resumable.index(owner,resumeDoc.id)).status,"ready");
+    assert.deepEqual(attempted,["Repeated passage","Second passage","Second passage"]);
+    assert.equal((await resumable.retrieve(owner,"Repeated passage",[resumeDoc.id])).length,3);
+    await resumable.remove(owner,resumeDoc.id);
+    console.log("PASS retries reuse completed and duplicate embeddings while preserving every source location");
+
     let found=0,total=0;
     const failures:string[]=[];
     const decoy=await desk.upload(owner,"Office notes.txt",Buffer.from(distractors));

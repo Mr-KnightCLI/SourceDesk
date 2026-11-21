@@ -45,7 +45,7 @@ To demonstrate live generation, create a private workspace, click **Add sample d
 ## How it works
 
 - PDF text is extracted one page at a time. DOCX tracks Word heading styles and paragraph numbers, Markdown tracks headings and line numbers, and TXT tracks paragraphs. Scanned PDFs require OCR. Files are limited to 10 MB, PDFs to 300 pages, and each document to 900 chunks.
-- SourceDesk stores originals for retries and publishes the chunks and indexed status in one database statement. Deletion cascades to all chunks. Failed or interrupted runs can be retried from the document list. An interrupted indexing attempt becomes eligible for takeover after 20 minutes.
+- SourceDesk stores originals and saves completed embedding batches so retries can resume. Chunks become searchable when the document is marked indexed. Deletion cascades to all chunks. An interrupted indexing attempt becomes eligible for takeover after 20 minutes.
 - Retrieval ranks eligible chunks with pgvector cosine distance and applies a small per-document ranking penalty to diversify the top eight. Only the user's question and those excerpts with source labels are sent to the chat provider. The system prompt explicitly treats document text as untrusted. The server validates citation IDs and resolves previews through an owner-scoped lookup. ID validation checks provenance, while users can inspect the exact excerpt to assess the claim.
 - The private workspace uses scrypt password hashes and opaque, expiring sessions in HTTP-only cookies. Every document, retrieval, and preview query is scoped to the session's account. Use HTTPS and request rate limits for a public deployment. Queries and extracted text are sent to the configured providers during indexing and Q&A.
 

@@ -47,7 +47,7 @@ export function provider(): Provider {
   }
   return {
     model: embedding.base + "|" + model,
-    embeddingBatchSize: gemini ? 20 : undefined,
+    embeddingBatchSize: gemini ? 40 : undefined,
     async embed(input) {
       const result = await call(embedding, "/embeddings", { model, input });
       return result.data.sort((a: { index: number }, b: { index: number }) => a.index - b.index).map((item: { embedding: number[] }) => item.embedding);

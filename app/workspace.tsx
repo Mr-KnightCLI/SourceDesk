@@ -194,7 +194,7 @@ export default function Workspace({uploadLimitMb,workspaceEnabled}: {uploadLimit
         <div className="doc-list">{listed.map(doc=><div key={doc.id} className="doc">
           <div className="doc-row">
             <button type="button" title={doc.name} className="doc-select" disabled={doc.status!=="ready"} aria-pressed={scoped?.includes(doc.id)??false} onClick={()=>toggle(doc.id)}>
-              <FileText size={18}/><span><strong>{doc.name}</strong><small>{busyIds.includes(doc.id)?"Indexing…":doc.status==="ready"?"Indexed":doc.status==="pending"?"Awaiting indexing":doc.status==="indexing"?"Indexing…":"Indexing failed"}</small></span>
+              <FileText size={18}/><span><strong>{doc.name}</strong><small>{busyIds.includes(doc.id)||doc.status==="indexing"?(doc.processed?`Indexing · ${doc.processed} passages processed`:"Indexing…"):doc.status==="ready"?"Indexed":doc.status==="pending"?"Awaiting indexing":"Indexing failed"}</small></span>
               {scoped?.includes(doc.id)&&<Check size={15}/>}
             </button>
             {user&&<button type="button" className="icon" disabled={asking} aria-label={"Delete "+doc.name} onClick={()=>setDeleteId(doc.id)}><Trash2 size={15}/></button>}

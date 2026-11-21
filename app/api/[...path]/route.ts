@@ -7,6 +7,7 @@ import { store } from "../../../lib/store";
 
 export const runtime = "nodejs";
 export const maxDuration = 300;
+export const preferredRegion = "iad1";
 const deploymentUploadLimit = process.env.VERCEL === "1" ? 4 : 10;
 const uploadLimit = Math.min(maxBytes,deploymentUploadLimit * 1024 * 1024);
 const uploadLimitError = `This file exceeds the ${deploymentUploadLimit} MB limit.`;

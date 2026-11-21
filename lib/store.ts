@@ -3,7 +3,7 @@ import { extract, maxBytes, split, supported, UserError } from "./extract";
 import type { Provider } from "./provider";
 
 export type Query = <T = Record<string, unknown>>(sql: string, params?: unknown[]) => Promise<T[]>;
-export type Document = { id: string; name: string; status: string; error: string | null };
+export type Document = { id: string; name: string; status: string; error: string | null; processed?: number | null };
 export type Source = { id: string; document: string; name: string; location: string; excerpt: string };
 export const missing = "I couldn’t find enough evidence in the selected documents to answer that question.";
 const overviewRequest = /^(?:(?:please|(?:can|could|would) you)\s+)*(?:(?:summari[sz]e|give me (?:a summary|an overview)(?: of)?)(?:\s+(?:it|them|this|these|the|selected|uploaded|my|pdfs?|files?|documents?|chapter|unit|notes|briefly|for me)|\s+[“"][^”"]+[”"])*[.!?]*|(?:summary|overview)(?: please)?[.!?]*|what (?:is|are) (?:it|this|these|the (?:pdfs?|documents?|files?|chapter|unit)) about[?!.]*)$/i;
@@ -16,7 +16,9 @@ function vector(values: number[] | undefined) {
 }
 
 export function store(query: Query, ai: Provider) {
-  const list = (owner: string) => query<Document>("SELECT id,name,status,error FROM documents WHERE owner=$1 ORDER BY created,id", [owner]);
+  const list = (owner: string) => query<Document>(`SELECT d.id,d.name,d.status,d.error,
+    CASE WHEN d.status IN ('indexing','failed') THEN (SELECT count(*)::int FROM chunks WHERE document=d.id) END AS processed
+    FROM documents d WHERE d.owner=$1 ORDER BY d.created,d.id`, [owner]);
   async function upload(owner: string, name: string, content: Buffer) {
     if (!supported.test(name)) throw new UserError("Upload a PDF, DOCX, TXT, or Markdown file.", 415);
     if (content.length > maxBytes) throw new UserError("This file exceeds the 10 MB limit.", 413);
@@ -36,21 +38,39 @@ export function store(query: Query, ai: Provider) {
     try {
       const chunks = split(await extract(doc.name, Buffer.from(doc.content)));
       if (chunks.length > 900) throw new UserError("This document contains too much text to index. Split it into smaller files.");
-      const rows = [];
       const batchSize = ai.embeddingBatchSize ?? 64;
-      for (let i = 0; i < chunks.length; i += batchSize) {
-        const batch = chunks.slice(i, i + batchSize);
-        const embeddings = await ai.embed(batch.map(p => p.excerpt));
-        rows.push(...batch.map((chunk, j) => ({ ...chunk, ordinal: i + j, embedding: vector(embeddings[j]) })));
+      const saved = await query<{ordinal:number;location:string;excerpt:string;embedding:string;model:string}>(
+        "SELECT ordinal,location,excerpt,embedding::text,model FROM chunks WHERE document=$1 ORDER BY ordinal", [id]);
+      const cached = new Map(saved.filter(row=>row.model===ai.model).map(row=>[row.excerpt,row.embedding]));
+      const byOrdinal = new Map(saved.map(row=>[row.ordinal,row]));
+      const pending = chunks.map((chunk,ordinal)=>({...chunk,ordinal})).filter(chunk=>{
+        const row=byOrdinal.get(chunk.ordinal);
+        return !row || row.model!==ai.model || row.location!==chunk.location || row.excerpt!==chunk.excerpt;
+      });
+      for (let i = 0; i < pending.length; i += batchSize) {
+        const batch = pending.slice(i, i + batchSize);
+        const missing = [...new Set(batch.map(p=>p.excerpt))].filter(excerpt=>!cached.has(excerpt));
+        if (missing.length) {
+          const embeddings = await ai.embed(missing);
+          missing.forEach((excerpt,j)=>cached.set(excerpt,vector(embeddings[j])));
+        }
+        const rows = batch.map(chunk=>({...chunk,embedding:cached.get(chunk.excerpt)}));
+        // Save completed work without exposing it to retrieval until the document is ready.
+        const [active] = await query(`WITH claimed AS (
+          UPDATE documents SET updated=now() WHERE id=$1 AND owner=$2 AND attempt=$3 RETURNING id
+        ), saved AS (
+          INSERT INTO chunks(document,ordinal,location,excerpt,embedding,model)
+          SELECT claimed.id,r.ordinal,r.location,r.excerpt,r.embedding::vector,$5
+          FROM claimed CROSS JOIN jsonb_to_recordset($4::jsonb) AS r(ordinal int,location text,excerpt text,embedding text)
+          ON CONFLICT(document,ordinal) DO UPDATE SET location=excluded.location,excerpt=excluded.excerpt,embedding=excluded.embedding,model=excluded.model
+        ) SELECT id FROM claimed`, [id,owner,attempt,JSON.stringify(rows),ai.model]);
+        if (!active) throw new UserError("This indexing attempt is no longer active.",409);
       }
-      // Publish all chunks and the status in one statement, guarded by the active attempt.
       const [ready] = await query<Document>(`WITH claimed AS (
         UPDATE documents SET status='ready',attempt=NULL,updated=now() WHERE id=$1 AND owner=$2 AND attempt=$3 RETURNING id,name,status,error
-      ), inserted AS (
-        INSERT INTO chunks(document,ordinal,location,excerpt,embedding,model)
-        SELECT claimed.id,r.ordinal,r.location,r.excerpt,r.embedding::vector,$5
-        FROM claimed CROSS JOIN jsonb_to_recordset($4::jsonb) AS r(ordinal int, location text, excerpt text, embedding text)
-      ) SELECT * FROM claimed`, [id,owner,attempt,JSON.stringify(rows),ai.model]);
+      ), pruned AS (
+        DELETE FROM chunks WHERE document IN (SELECT id FROM claimed) AND ordinal >= $4
+      ) SELECT * FROM claimed`, [id,owner,attempt,chunks.length]);
       return ready ?? { ...doc, status: "indexing", content: undefined };
     } catch (error) {
       const message = error instanceof UserError ? error.message : "Indexing failed. Try again.";
